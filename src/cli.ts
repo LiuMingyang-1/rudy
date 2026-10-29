@@ -19,7 +19,15 @@ async function main(): Promise<void> {
       stdout.write(event.assistantMessageEvent.delta);
     }
     if (event.type === "tool_execution_start") {
-      console.error(`[${event.toolName}]`);
+      console.error(`\n[${event.toolName}]`);
+    }
+    if (event.type === "tool_execution_update") {
+      const content = event.partialResult?.content;
+      if (Array.isArray(content)) {
+        for (const item of content) {
+          if (item.type === "text") console.error(`[${event.toolName}] ${item.text}`);
+        }
+      }
     }
   });
 

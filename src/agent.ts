@@ -7,7 +7,7 @@ import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { RudyConfig } from "./config.ts";
 import { createFileTools } from "./tools/files.ts";
 
-/** Assemble Rudy's model, instructions and tools on the published pi runtime. */
+/** 在已发布的 pi 运行时上组装 Rudy 的模型、指令和工具。 **/
 export async function createRudy(config: RudyConfig): Promise<Agent> {
   const models = createModels();
   models.setProvider(createRudyProvider(config));

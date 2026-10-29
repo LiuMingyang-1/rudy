@@ -8,7 +8,7 @@ export interface RudyConfig {
   workspace: string;
 }
 
-/** Validate launch configuration without making a model request. */
+/** 验证启动配置，无需进行模型请求。 **/
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
   const provider = env.RUDY_PROVIDER?.trim() || "openai";
   const baseUrl = env.RUDY_BASE_URL?.trim().replace(/\/+$/, "") || undefined;
