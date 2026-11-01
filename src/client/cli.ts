@@ -1,8 +1,8 @@
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import type { Agent } from "@earendil-works/pi-agent-core";
-import { createRudy } from "./agent.ts";
-import { loadConfig } from "./config.ts";
+import { createRudy } from "../agent.ts";
+import { loadConfig } from "../config.ts";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

@@ -13,7 +13,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/cli.ts",
+    "start": "node --env-file-if-exists=.env src/client/cli.ts",
     "check": "biome check . && tsc --noEmit",
     "format": "biome check --write .",
     "test:unit": "node --test test/*.test.ts"

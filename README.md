@@ -69,9 +69,10 @@ Chat Completions 协议。仅支持 Responses 的代理暂不在此配置范围�
 
 ```text
 src/
-  cli.ts           命令行入口和流式输出
   config.ts        环境配置与校验
   agent.ts         组装 pi、模型、提示词和工具
+  client/cli.ts    命令行入口和流式输出
+  runtime/model.ts 模型 provider 与自定义模型配置
   tools/files.ts   工作目录内的只读文件工具
 test/              离线测试，使用 pi 的模拟模型，不消耗 API 额度
 ```
