@@ -1,53 +1,44 @@
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import type { Agent } from "@earendil-works/pi-agent-core";
 import { createRudy } from "../agent.ts";
 import { loadConfig } from "../config.ts";
+import { openSession, type RudySession, type SessionSummary } from "../session/session.ts";
+import {
+  printAgentEvent,
+  printError,
+  printHelp,
+  printReplyEnd,
+  printSessions,
+  printStatus,
+  printWelcome,
+} from "./output.ts";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args[0] === "--help" || args[0] === "-h") {
-    console.log(
-      'Usage: npm start [-- "your task"]\n\nChat commands: /reset, /exit\nConfigure .env using .env.example.',
-    );
+    printHelp();
     return;
   }
   const config = loadConfig();
   const agent = await createRudy(config);
-  agent.subscribe((event) => {
-    if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
-      stdout.write(event.assistantMessageEvent.delta);
-    }
-    if (event.type === "tool_execution_start") {
-      console.error(`\n[${event.toolName}]`);
-    }
-    if (event.type === "tool_execution_update") {
-      const content = event.partialResult?.content;
-      if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item.type === "text") console.error(`[${event.toolName}] ${item.text}`);
-        }
-      }
-    }
-  });
+  agent.subscribe(printAgentEvent);
+  if (!args.length && !stdin.isTTY) {
+    throw new Error('For non-interactive use, pass a task: npm start -- "your task".');
+  }
+  const session = await openSession(agent, config.workspace);
 
   if (args.length > 0) {
     const cancel = () => agent.abort();
     process.on("SIGINT", cancel);
     try {
-      await reply(agent, args.join(" "));
+      await reply(session, args.join(" "));
     } finally {
       process.off("SIGINT", cancel);
     }
     return;
   }
-  if (!stdin.isTTY) {
-    throw new Error('For non-interactive use, pass a task: npm start -- "your task".');
-  }
-
-  console.log(
-    `Rudy | ${config.provider}/${config.model}\nWorkspace: ${config.workspace}\n/reset clears this conversation; /exit quits.`,
-  );
+  printWelcome(config);
+  let listed: SessionSummary[] = [];
   const input = createInterface({ input: stdin, output: stdout, prompt: "you> " });
   input.on("SIGINT", () => {
     if (agent.state.isStreaming) agent.abort();
@@ -59,15 +50,26 @@ async function main(): Promise<void> {
     for await (const line of input) {
       const text = line.trim();
       if (text === "/exit") break;
-      if (text === "/reset") {
-        agent.reset();
-        console.log("Conversation cleared.");
-      } else if (text) {
-        try {
-          await reply(agent, text);
-        } catch (error) {
-          console.error(error instanceof Error ? error.message : String(error));
+      try {
+        if (text === "/reset") {
+          await session.reset();
+          listed = [];
+          printStatus("reset");
+        } else if (text === "/resume") {
+          listed = [];
+          listed = await session.list();
+          printSessions(listed);
+        } else if (/^\/resume\s/.test(text)) {
+          const number = text.slice("/resume".length).trim();
+          const selected = /^[1-9]\d*$/.test(number) ? listed[Number(number) - 1] : undefined;
+          if (!selected) throw new Error("Run /resume, then use /resume <number> from that list.");
+          await session.resume(selected.id);
+          printStatus("resume");
+        } else if (text) {
+          await reply(session, text);
         }
+      } catch (error) {
+        printError(error);
       }
       input.prompt();
     }
@@ -76,13 +78,15 @@ async function main(): Promise<void> {
   }
 }
 
-async function reply(agent: Agent, text: string): Promise<void> {
-  await agent.prompt(text);
-  stdout.write("\n");
-  if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
+async function reply(session: RudySession, text: string): Promise<void> {
+  try {
+    await session.prompt(text);
+  } finally {
+    printReplyEnd();
+  }
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  printError(error);
   process.exitCode = 1;
 });
