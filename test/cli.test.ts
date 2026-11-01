@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
 test("CLI help works without credentials", () => {
-  const result = spawnSync(process.execPath, ["src/cli.ts", "--help"], {
+  const result = spawnSync(process.execPath, ["src/client/cli.ts", "--help"], {
     encoding: "utf8",
     env: { ...process.env, RUDY_API_KEY: "", OPENAI_API_KEY: "", ANTHROPIC_API_KEY: "" },
   });
@@ -12,7 +12,7 @@ test("CLI help works without credentials", () => {
 });
 
 test("CLI fails clearly before making requests when credentials are missing", () => {
-  const result = spawnSync(process.execPath, ["src/cli.ts", "hello"], {
+  const result = spawnSync(process.execPath, ["src/client/cli.ts", "hello"], {
     encoding: "utf8",
     env: {
       ...process.env,
