@@ -30,8 +30,8 @@ export function createRudyProvider(config: RudyConfig) {
         reasoning: false,
         // Custom endpoints have no catalog metadata; these are local defaults, not price estimates.
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128000,
-        maxTokens: 4096,
+        contextWindow: config.contextWindow,
+        maxTokens: config.maxTokens,
       },
     ],
     api: api === "anthropic-messages" ? anthropicMessagesApi() : openAICompletionsApi(),

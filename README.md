@@ -41,6 +41,8 @@ npm start -- "读取 README.md，说明这个项目目前能做什么"
 | `RUDY_PROVIDER` | `openai` | 官方服务为 `openai` / `anthropic`；自定义服务可填写自己的名称 |
 | `RUDY_MODEL` | 按 provider 选择 | OpenAI 默认 `gpt-5.4`，Anthropic 默认 `claude-sonnet-4-6` |
 | `RUDY_BASE_URL` | 无 | 自定义 API 基础地址，保留服务要求的路径前缀 |
+| `RUDY_CONTEXT_WINDOW` | `128000` | 自定义端点的上下文窗口 token 数，正整数 |
+| `RUDY_MAX_TOKENS` | `4096` | 自定义端点的最大输出 token 数，正整数 |
 | `RUDY_API_KEY` | 无 | 通用 API 凭证，优先于下面的 provider 专用变量 |
 | `OPENAI_API_KEY` | 无 | OpenAI API 凭证 |
 | `ANTHROPIC_API_KEY` | 无 | Anthropic API 凭证 |
@@ -63,8 +65,11 @@ RUDY_API_KEY=your-api-key
 `RUDY_PROVIDER=anthropic` 使用 Anthropic Messages 协议，基础地址通常不包含 `/v1/messages`，
 例如 `https://your-proxy.example`。其他 provider 名称（包括 `openai`）在自定义地址下使用
 Chat Completions 协议。仅支持 Responses 的代理暂不在此配置范围内。
-自定义模型当前按纯文本、无额外推理参数处理，输出上限为 4096 tokens，
-上下文窗口暂按 128000 tokens 声明，价格未知；这些默认元数据不代表服务的实际能力或价格。
+自定义模型当前按纯文本、无额外推理参数处理，价格未知。可在 `.env` 中设置
+`RUDY_CONTEXT_WINDOW=200000` 和 `RUDY_MAX_TOKENS=8192`，按端点实际支持的模型上限填写。
+未设置或留空时分别使用 128000 和 4096；非法值会在启动时报错。
+这两个配置仅用于自定义端点；不设置 Base URL 时仍使用 pi 模型目录的元数据。
+配置不会扩大服务的实际能力，也不代表价格估算。
 
 ## 代码结构
 

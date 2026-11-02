@@ -35,6 +35,8 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
       provider: "openai",
       model: "gpt-5.4",
       apiKey: "not-to-be-stored",
+      contextWindow: 128000,
+      maxTokens: 4096,
       workspace,
     });
   }

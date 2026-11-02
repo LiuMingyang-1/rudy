@@ -4,6 +4,8 @@ export interface RudyConfig {
   provider: string;
   model: string;
   baseUrl?: string;
+  contextWindow: number;
+  maxTokens: number;
   apiKey: string;
   workspace: string;
 }
@@ -46,7 +48,19 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
     provider,
     model: model || (provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4"),
     baseUrl,
+    contextWindow: positiveInteger(env, "RUDY_CONTEXT_WINDOW", 128000),
+    maxTokens: positiveInteger(env, "RUDY_MAX_TOKENS", 4096),
     apiKey,
     workspace: resolve(env.RUDY_WORKSPACE?.trim() || "."),
   };
+}
+
+function positiveInteger(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const value = env[name]?.trim();
+  if (!value) return fallback;
+  const number = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(number) || number <= 0) {
+    throw new Error(`${name} must be a positive safe integer.`);
+  }
+  return number;
 }
