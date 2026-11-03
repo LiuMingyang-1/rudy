@@ -9,6 +9,9 @@ test("configuration selects provider-specific defaults and credentials", () => {
   assert.equal(openai.model, "gpt-5.4");
   assert.equal(openai.contextWindow, 128000);
   assert.equal(openai.maxTokens, 4096);
+  assert.equal(openai.compactionThreshold, 0.8);
+  assert.equal(openai.compactionKeepRecentTokens, 20000);
+  assert.equal(openai.compactionMaxTokens, 8192);
   const anthropic = loadConfig({
     RUDY_PROVIDER: "anthropic",
     ANTHROPIC_API_KEY: "test-anthropic",
@@ -17,6 +20,31 @@ test("configuration selects provider-specific defaults and credentials", () => {
   assert.equal(anthropic.model, "claude-sonnet-4-6");
   assert.equal(anthropic.apiKey, "test-anthropic");
   assert.equal(anthropic.workspace, resolve("test"));
+});
+
+test("compaction settings validate ratios and independent positive integer budgets", () => {
+  const config = loadConfig({
+    RUDY_API_KEY: "unused",
+    RUDY_COMPACTION_THRESHOLD: "0.75",
+    RUDY_COMPACTION_KEEP_RECENT_TOKENS: "30000",
+    RUDY_COMPACTION_MAX_TOKENS: "16000",
+  });
+  assert.equal(config.compactionThreshold, 0.75);
+  assert.equal(config.compactionKeepRecentTokens, 30000);
+  assert.equal(config.compactionMaxTokens, 16000);
+  assert.equal(config.maxTokens, 4096);
+  for (const ratio of ["0", "1", "-0.1", "Infinity", "NaN", "text"])
+    assert.throws(
+      () => loadConfig({ RUDY_API_KEY: "unused", RUDY_COMPACTION_THRESHOLD: ratio }),
+      /RUDY_COMPACTION_THRESHOLD/,
+    );
+  for (const name of ["RUDY_COMPACTION_KEEP_RECENT_TOKENS", "RUDY_COMPACTION_MAX_TOKENS"]) {
+    for (const value of ["0", "-1", "1.5", "9007199254740992", "text"])
+      assert.throws(
+        () => loadConfig({ RUDY_API_KEY: "unused", [name]: value }),
+        /positive safe integer/,
+      );
+  }
 });
 
 test("configuration reads custom token limits and defaults empty values", () => {

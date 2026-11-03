@@ -123,6 +123,9 @@ test("CLI resets, lists and resumes sessions, then restores them across processe
     }
     return {
       ready,
+      get errors() {
+        return errors;
+      },
       async send(text: string) {
         const offset = output.length;
         child.stdin.write(`${text}\n`);
@@ -140,7 +143,10 @@ test("CLI resets, lists and resumes sessions, then restores them across processe
 
   const first = start();
   await first.ready();
-  await first.send("First question");
+  assert.match(await first.send("/compact"), /No history to compact/);
+  await first.send("First question\n/reset\n/compact\n/resume");
+  assert.equal(requests.length, 1);
+  assert.equal(first.errors.match(/Session is busy/g)?.length, 3);
   assert.match(await first.send("/reset"), /Started a new conversation/);
   await first.send("/resume 1");
   await first.send("Second question");

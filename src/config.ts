@@ -6,6 +6,9 @@ export interface RudyConfig {
   baseUrl?: string;
   contextWindow: number;
   maxTokens: number;
+  compactionThreshold?: number;
+  compactionKeepRecentTokens?: number;
+  compactionMaxTokens?: number;
   apiKey: string;
   workspace: string;
 }
@@ -44,12 +47,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
       `Set RUDY_API_KEY or ${fallbackKey} in .env or your environment. See .env.example.`,
     );
   }
+  const compactionThreshold = Number(env.RUDY_COMPACTION_THRESHOLD?.trim() || "0.8");
+  if (!Number.isFinite(compactionThreshold) || compactionThreshold <= 0 || compactionThreshold >= 1)
+    throw new Error("RUDY_COMPACTION_THRESHOLD must be greater than 0 and less than 1.");
   return {
     provider,
     model: model || (provider === "anthropic" ? "claude-sonnet-4-6" : "gpt-5.4"),
     baseUrl,
     contextWindow: positiveInteger(env, "RUDY_CONTEXT_WINDOW", 128000),
     maxTokens: positiveInteger(env, "RUDY_MAX_TOKENS", 4096),
+    compactionThreshold,
+    compactionKeepRecentTokens: positiveInteger(env, "RUDY_COMPACTION_KEEP_RECENT_TOKENS", 20000),
+    compactionMaxTokens: positiveInteger(env, "RUDY_COMPACTION_MAX_TOKENS", 8192),
     apiKey,
     workspace: resolve(env.RUDY_WORKSPACE?.trim() || "."),
   };
