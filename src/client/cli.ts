@@ -2,7 +2,8 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import { createRudy } from "../agent.ts";
 import { loadConfig } from "../config.ts";
-import { openSession, type RudySession, type SessionSummary } from "../session/session.ts";
+import { openSession, type RudySession } from "../session/session.ts";
+import type { SessionSummary } from "../session/store.ts";
 import {
   printAgentEvent,
   printError,

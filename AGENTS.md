@@ -25,6 +25,7 @@
 - Ask before removing intentional functionality unless its removal is already authorized.
 - Never put credentials in source, logs, tests or committed configuration.
 - Keep model-visible file access within the configured workspace. Test boundary changes.
+- Keep each source and test file at most 200 lines. When a file outgrows that, replace it with a folder of the same name containing focused files; do not add barrel files.
 
 ## Dependencies and validation
 

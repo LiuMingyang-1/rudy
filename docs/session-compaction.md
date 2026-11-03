@@ -6,7 +6,7 @@
 
 长对话持续运行或恢复后，会逐渐接近模型上下文窗口。Rudy 在请求模型前压缩历史，让同一 session 可以继续工作。
 
-第一版采用可阅读的文本摘要，不引入后台压缩、长期记忆、向量检索或单独的摘要模型。压缩策略、记录和恢复属于 `src/session/`；pi-core 继续负责模型与工具循环，`src/agent.ts` 只负责组装。
+第一版采用可阅读的文本摘要，不引入后台压缩、长期记忆、向量检索或单独的摘要模型。压缩策略属于 `src/compaction/`，记录和恢复属于 `src/session/`；pi-core 继续负责模型与工具循环，`src/agent.ts` 只负责组装。
 
 核心区分：磁盘上的完整历史不等于本次请求发送的有效上下文。
 
@@ -184,7 +184,7 @@ signal 是同一次操作的取消通知，应传递给摘要和等待逻辑。�
 
 ## 10. 模块建议与验收
 
-建议由 `src/session/compaction.ts` 放置计数、边界、摘要与重试逻辑；`src/session/session.ts` 负责互斥、记录写盘、恢复和接入钩子。分页读取作为 session 能力实现，由工具组装层暴露。避免提前设计通用插件框架。
+实现按 `client -> session -> compaction -> pi-ai` 方向拆分。`src/compaction/` 不依赖 `src/session/`：`tokens.ts` 放置本地估算、保留边界和 usage 基准；`checkpoint.ts` 放置检查点类型与有效上下文投影；`summary.ts` 放置摘要提示词与生成重试；`compact.ts` 放置压缩决策并返回不落盘的结果。`src/session/`：`session.ts` 负责互斥、写盘失败锁存、恢复、接入钩子和对外命令；`store.ts` 负责目录、指针与 JSONL 读写；`records.ts` 负责记录校验；`interrupted.ts` 负责中断工具补全；`history-tool.ts` 实现分页历史读取工具。避免提前设计通用插件框架。
 
 实现必须使用离线模型桩验证，不能调用真实模型 API。重点覆盖：
 

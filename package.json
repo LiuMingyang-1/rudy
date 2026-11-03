@@ -16,7 +16,7 @@
     "start": "node --env-file-if-exists=.env src/client/cli.ts",
     "check": "biome check . && tsc --noEmit",
     "format": "biome check --write .",
-    "test:unit": "node --test test/*.test.ts"
+    "test:unit": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.4.0",

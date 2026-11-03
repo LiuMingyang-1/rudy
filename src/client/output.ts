@@ -1,7 +1,7 @@
 import { stdout } from "node:process";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { RudyConfig } from "../config.ts";
-import type { SessionSummary } from "../session/session.ts";
+import type { SessionSummary } from "../session/store.ts";
 
 export function printHelp(): void {
   console.log(
