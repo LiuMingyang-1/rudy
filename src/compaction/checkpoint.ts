@@ -1,5 +1,4 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 
 export interface Checkpoint {
   summary: string;
@@ -16,12 +15,16 @@ export function summaryMessage(record: Pick<Checkpoint, "summary" | "timestamp">
   };
 }
 
-export function projectHistory(messages: AgentMessage[], record?: Checkpoint): AgentMessage[] {
-  if (!record) return messages;
-  const system = getCurrentSystemMessage(messages);
+export function projectHistory(
+  messages: AgentMessage[],
+  checkpoint: Checkpoint | undefined,
+  system: AgentMessage | undefined,
+): AgentMessage[] {
   return [
     ...(system ? [system] : []),
-    summaryMessage(record),
-    ...messages.slice(record.firstKept - 1).filter((message) => message.role !== "system"),
+    ...(checkpoint ? [summaryMessage(checkpoint)] : []),
+    ...messages
+      .slice(checkpoint ? checkpoint.firstKept - 1 : 0)
+      .filter((message) => message.role !== "system"),
   ];
 }

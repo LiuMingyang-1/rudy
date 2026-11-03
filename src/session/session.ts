@@ -63,6 +63,7 @@ export async function openSession(
     agent.state.messages = [{ ...initialSystem, toolsAdded }, ...agent.state.messages.slice(1)];
   }
   const baseline = structuredClone(agent.state.messages);
+  const system = baseline[0]?.role === "system" ? baseline[0] : undefined;
   function failWrite(): Error {
     failure = new Error("Session write failed. Reopen or reset the session before continuing.");
     agent.abort();
@@ -85,7 +86,7 @@ export async function openSession(
       messages.push(...interrupted);
     }
     await store.point(id);
-    activate(id, projectHistory(messages, compaction), messages, compaction);
+    activate(id, projectHistory(messages, compaction, system), messages, compaction);
   }
   function activate(
     id: string,

@@ -1,5 +1,5 @@
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { Api, Model, Usage } from "@earendil-works/pi-ai";
+import { type Api, getCurrentSystemMessage, type Model, type Usage } from "@earendil-works/pi-ai";
 import { type Checkpoint, projectHistory } from "./checkpoint.ts";
 import { generateSummary } from "./summary.ts";
 import { estimateMessages, recentStart, type UsageBaseline } from "./tokens.ts";
@@ -60,7 +60,7 @@ export async function compact(input: {
     timestamp: Date.now(),
     firstKept,
   };
-  const replacement = projectHistory(raw, candidate);
+  const replacement = projectHistory(raw, candidate, getCurrentSystemMessage(messages));
   const tokensAfter = estimateMessages(replacement);
   if (!fits(tokensAfter) || tokensAfter >= before)
     throw new Error("Compaction did not reduce context enough to continue safely.");

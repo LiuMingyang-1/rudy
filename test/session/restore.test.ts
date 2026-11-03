@@ -138,7 +138,10 @@ test("unfinished calls in the middle restore unchanged while partial tails are t
     assert.equal(await readFile(file, "utf8"), contents);
     assert.equal(await readFile(pointer, "utf8"), `${JSON.stringify({ id })}\n`);
     assert.equal(agent.sessionId, id);
-    assert.equal(JSON.stringify(agent.state.messages), JSON.stringify([...baseline, ...recorded]));
+    assert.equal(
+      JSON.stringify(agent.state.messages),
+      JSON.stringify([...baseline, ...recorded.filter((m) => m.role !== "system")]),
+    );
     const next = await f.agent();
     await f.open(next);
     assert.equal(await readFile(file, "utf8"), contents);
