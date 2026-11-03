@@ -5,13 +5,13 @@ import type { SessionSummary } from "../session/session.ts";
 
 export function printHelp(): void {
   console.log(
-    'Usage: npm start [-- "your task"]\n\nChat commands: /reset, /resume, /resume <number>, /exit\nConfigure .env using .env.example.',
+    'Usage: npm start [-- "your task"]\n\nChat commands: /reset, /resume, /resume <number>, /compact, /exit\nConfigure .env using .env.example.',
   );
 }
 
 export function printWelcome(config: RudyConfig): void {
   console.log(
-    `Rudy | ${config.provider}/${config.model}\nWorkspace: ${config.workspace}\n/reset starts a new conversation; /resume lists conversations; /exit quits.`,
+    `Rudy | ${config.provider}/${config.model}\nWorkspace: ${config.workspace}\n/reset starts a new conversation; /resume lists conversations; /compact summarizes history; /exit quits.`,
   );
 }
 

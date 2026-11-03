@@ -27,7 +27,11 @@ export async function createRudy(config: RudyConfig): Promise<Agent> {
       ].join("\n"),
       tools,
     },
-    streamFn: models.streamSimple.bind(models),
+    streamFn: (model, context, options) =>
+      models.streamSimple(model, context, {
+        ...options,
+        maxTokens: options?.maxTokens ?? Math.min(config.maxTokens, model.maxTokens),
+      }),
     getApiKey: () => config.apiKey,
     identity: {
       attribution: { name: "Rudy", url: "https://github.com/LiuMingyang-1/rudy" },

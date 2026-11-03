@@ -35,6 +35,8 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
       provider: "openai",
       model: "gpt-5.4",
       apiKey: "not-to-be-stored",
+      contextWindow: 128000,
+      maxTokens: 4096,
       workspace,
     });
   }
@@ -73,11 +75,11 @@ test("sessions restore full pi history and send it to the next model request", a
 test("reset retains old files; resume updates the startup pointer; empty sessions are omitted", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  const baseline = structuredClone(agent.state.messages);
   const faux = createFauxCore({});
   faux.setResponses([fauxAssistantMessage("Old answer"), fauxAssistantMessage("New answer")]);
   agent.streamFunction = faux.streamSimple;
   const session = await openSession(agent, f.workspace, f.storage);
+  const baseline = structuredClone(agent.state.messages);
   assert.deepEqual(await session.list(), []);
   await session.prompt("Old question");
   const old = agent.sessionId;

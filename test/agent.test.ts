@@ -18,6 +18,8 @@ test("Rudy executes a tool and sends its result back before streaming the answer
     model: "gpt-5.4",
     apiKey: "unused",
     workspace,
+    contextWindow: 128000,
+    maxTokens: 4096,
   });
   const faux = createFauxCore({});
   faux.setResponses([
@@ -48,6 +50,8 @@ test("Rudy returns denied file access to the model as a tool failure", async () 
   const agent = await createRudy({
     provider: "anthropic",
     model: "claude-sonnet-4-6",
+    contextWindow: 128000,
+    maxTokens: 4096,
     apiKey: "unused",
     workspace: ".",
   });
@@ -68,6 +72,8 @@ test("Rudy returns denied file access to the model as a tool failure", async () 
 
 test("Rudy exposes model failures and rejects unknown model configuration", async () => {
   const config = {
+    contextWindow: 128000,
+    maxTokens: 4096,
     provider: "openai",
     model: "gpt-5.4",
     apiKey: "unused",
@@ -86,6 +92,8 @@ test("Rudy exposes model failures and rejects unknown model configuration", asyn
 
 test("Rudy can cancel an active streamed response", async () => {
   const agent = await createRudy({
+    contextWindow: 128000,
+    maxTokens: 4096,
     provider: "openai",
     model: "gpt-5.4",
     apiKey: "unused",
@@ -192,8 +200,12 @@ for (const endpoint of [
         RUDY_BASE_URL: `http://127.0.0.1:${address.port}${endpoint.base}/`,
         RUDY_MODEL: "my-local-model",
         RUDY_API_KEY: "local-test-key",
+        RUDY_CONTEXT_WINDOW: "200000",
+        RUDY_MAX_TOKENS: "8192",
       }),
     );
+    assert.equal(agent.state.model.contextWindow, 200000);
+    assert.equal(agent.state.model.maxTokens, 8192);
     await agent.prompt("Hello");
     assert.equal(agent.state.errorMessage, undefined);
     assert.equal(requests.length, 1);
