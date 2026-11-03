@@ -6,12 +6,18 @@ export interface RudyConfig {
   baseUrl?: string;
   contextWindow: number;
   maxTokens: number;
-  compactionThreshold?: number;
-  compactionKeepRecentTokens?: number;
-  compactionMaxTokens?: number;
+  compactionThreshold: number;
+  compactionKeepRecentTokens: number;
+  compactionMaxTokens: number;
   apiKey: string;
   workspace: string;
 }
+
+export const compactionDefaults = {
+  compactionThreshold: 0.8,
+  compactionKeepRecentTokens: 20000,
+  compactionMaxTokens: 8192,
+};
 
 /** 验证启动配置，无需进行模型请求。 **/
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
@@ -47,7 +53,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
       `Set RUDY_API_KEY or ${fallbackKey} in .env or your environment. See .env.example.`,
     );
   }
-  const compactionThreshold = Number(env.RUDY_COMPACTION_THRESHOLD?.trim() || "0.8");
+  const compactionThreshold = Number(
+    env.RUDY_COMPACTION_THRESHOLD?.trim() || compactionDefaults.compactionThreshold,
+  );
   if (!Number.isFinite(compactionThreshold) || compactionThreshold <= 0 || compactionThreshold >= 1)
     throw new Error("RUDY_COMPACTION_THRESHOLD must be greater than 0 and less than 1.");
   return {
@@ -57,8 +65,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RudyConfig {
     contextWindow: positiveInteger(env, "RUDY_CONTEXT_WINDOW", 128000),
     maxTokens: positiveInteger(env, "RUDY_MAX_TOKENS", 4096),
     compactionThreshold,
-    compactionKeepRecentTokens: positiveInteger(env, "RUDY_COMPACTION_KEEP_RECENT_TOKENS", 20000),
-    compactionMaxTokens: positiveInteger(env, "RUDY_COMPACTION_MAX_TOKENS", 8192),
+    compactionKeepRecentTokens: positiveInteger(
+      env,
+      "RUDY_COMPACTION_KEEP_RECENT_TOKENS",
+      compactionDefaults.compactionKeepRecentTokens,
+    ),
+    compactionMaxTokens: positiveInteger(
+      env,
+      "RUDY_COMPACTION_MAX_TOKENS",
+      compactionDefaults.compactionMaxTokens,
+    ),
     apiKey,
     workspace: resolve(env.RUDY_WORKSPACE?.trim() || "."),
   };

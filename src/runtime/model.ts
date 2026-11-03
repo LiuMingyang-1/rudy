@@ -33,7 +33,7 @@ export function createRudyProvider(config: RudyConfig) {
         contextWindow: config.contextWindow,
         maxTokens: Math.min(
           config.contextWindow,
-          Math.max(config.maxTokens, config.compactionMaxTokens ?? 8192),
+          Math.max(config.maxTokens, config.compactionMaxTokens),
         ),
       },
     ],

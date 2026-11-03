@@ -5,10 +5,10 @@ import { generateSummary } from "./summary.ts";
 import { estimateMessages, recentStart, type UsageBaseline } from "./tokens.ts";
 
 export interface CompactionOptions {
-  compactionThreshold?: number;
-  compactionKeepRecentTokens?: number;
-  compactionMaxTokens?: number;
-  maxTokens?: number;
+  compactionThreshold: number;
+  compactionKeepRecentTokens: number;
+  compactionMaxTokens: number;
+  maxTokens: number;
 }
 
 export interface CompactionResult extends Checkpoint {
@@ -32,18 +32,13 @@ export async function compact(input: {
   const { agent, model, messages, raw, checkpoint, baseline, options, manual, signal } = input;
   signal?.throwIfAborted();
   const before = baseline.estimate(messages, model);
-  const output = Math.min(options.maxTokens ?? 4096, model.maxTokens);
+  const output = Math.min(options.maxTokens, model.maxTokens);
   const fits = (tokens: number) => tokens + output + 1024 < model.contextWindow;
-  if (
-    !manual &&
-    before < model.contextWindow * (options.compactionThreshold ?? 0.8) &&
-    fits(before)
-  )
-    return;
+  if (!manual && before < model.contextWindow * options.compactionThreshold && fits(before)) return;
   const conversation = messages.filter((message) => message.role !== "system");
   // The synthetic summary is already represented by the checkpoint, not a raw ordinal.
   const recent = checkpoint ? conversation.slice(1) : conversation;
-  const start = recentStart(recent, options.compactionKeepRecentTokens ?? 20000);
+  const start = recentStart(recent, options.compactionKeepRecentTokens);
   if (start === 0) {
     if (!fits(before))
       throw new Error(
@@ -54,17 +49,12 @@ export async function compact(input: {
   const tail = recent.slice(start);
   const first = tail[0];
   const firstKept = first ? raw.indexOf(first) + 1 : raw.length + 1;
+  if (firstKept === 0) throw new Error("Compaction boundary is not in the session history.");
   if (checkpoint && firstKept <= checkpoint.firstKept) {
     if (!fits(before)) throw new Error("Context still does not fit after compaction.");
     return;
   }
-  const result = await generateSummary(
-    agent,
-    model,
-    messages,
-    options.compactionMaxTokens ?? 8192,
-    signal,
-  );
+  const result = await generateSummary(agent, model, messages, options.compactionMaxTokens, signal);
   const candidate: Checkpoint = {
     summary: result.summary,
     timestamp: Date.now(),

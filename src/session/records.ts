@@ -11,17 +11,24 @@ export interface CompactionRecord extends Checkpoint {
   usage: Usage;
 }
 
-export function toRecord(result: CompactionResult, messageCount: number): CompactionRecord {
-  return {
+export function toRecord(
+  result: CompactionResult,
+  raw: AgentMessage[],
+  previous?: CompactionRecord,
+): CompactionRecord {
+  const record: CompactionRecord = {
     type: "compaction",
     summary: result.summary,
     usage: result.usage,
     timestamp: result.timestamp,
     firstKept: result.firstKept,
-    messageCount,
+    messageCount: raw.length,
     tokensBefore: result.tokensBefore,
     tokensAfter: result.tokensAfter,
   };
+  if (!validCheckpoint(record, raw, previous))
+    throw new Error("Compaction produced an invalid checkpoint.");
+  return record;
 }
 
 export const sessionId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -34,6 +41,8 @@ export function isCompaction(
   value: Record<string, unknown>,
   count: number,
 ): value is Record<string, unknown> & CompactionRecord {
+  if (!isRecord(value.usage)) return false;
+  const usage = value.usage;
   return (
     value.type === "compaction" &&
     typeof value.summary === "string" &&
@@ -51,15 +60,22 @@ export function isCompaction(
     typeof value.tokensAfter === "number" &&
     Number.isFinite(value.tokensAfter) &&
     value.tokensAfter >= 0 &&
-    isRecord(value.usage) &&
     ["input", "output", "cacheRead", "cacheWrite", "totalTokens"].every(
-      (key) =>
-        typeof value.usage === "object" &&
-        value.usage !== null &&
-        key in value.usage &&
-        typeof Reflect.get(value.usage, key) === "number" &&
-        Number.isFinite(Reflect.get(value.usage, key)),
+      (key) => typeof usage[key] === "number" && Number.isFinite(usage[key]),
     )
+  );
+}
+
+export function validCheckpoint(
+  value: unknown,
+  messages: AgentMessage[],
+  previous?: CompactionRecord,
+): value is Record<string, unknown> & CompactionRecord {
+  return (
+    isRecord(value) &&
+    isCompaction(value, messages.length) &&
+    messages[value.firstKept - 1]?.role !== "toolResult" &&
+    !(previous && value.firstKept < previous.firstKept)
   );
 }
 

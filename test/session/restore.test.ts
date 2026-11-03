@@ -3,7 +3,6 @@ import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createFauxCore, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import { openSession } from "../../src/session/session.ts";
 import { fixture } from "./fixture.ts";
 
 test("tool calls and results survive restore; interrupted calls are closed without executing tools", async (t) => {
@@ -18,48 +17,48 @@ test("tool calls and results survive restore; interrupted calls are closed witho
     fauxAssistantMessage("Done"),
   ]);
   agent.streamFunction = faux.streamSimple;
-  const session = await openSession(agent, f.workspace, f.storage);
+  const session = await f.open(agent);
   await session.prompt("Read notes");
   const file = join(f.directory, `${agent.sessionId}.jsonl`);
   const original = await readFile(file, "utf8");
   const next = await f.agent();
-  await openSession(next, f.workspace, f.storage);
+  await f.open(next);
   assert.equal(JSON.stringify(next.state.messages), JSON.stringify(agent.state.messages));
   const lines = original.trim().split("\n");
   const result = lines.findIndex((line) => line.includes('"role":"toolResult"'));
   assert.ok(result > 0);
   await writeFile(file, `${lines.slice(0, result).join("\n")}\n`);
   const interrupted = await f.agent();
-  await openSession(interrupted, f.workspace, f.storage);
+  await f.open(interrupted);
   const last = interrupted.state.messages.at(-1);
   assert.equal(last?.role, "toolResult");
   assert.equal(last.isError, true);
   const repaired = await readFile(file, "utf8");
-  await openSession(await f.agent(), f.workspace, f.storage);
+  await f.open(await f.agent());
   assert.equal(await readFile(file, "utf8"), repaired);
 });
 
 test("recovery truncates a partial UTF-8 tail before subsequent appends", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  await openSession(agent, f.workspace, f.storage);
+  await f.open(agent);
   const file = join(f.directory, `${agent.sessionId}.jsonl`);
   const original = await readFile(file);
   await appendFile(file, Buffer.from([123, 34, 0xe4, 0xbd]));
   const next = await f.agent();
-  const session = await openSession(next, f.workspace, f.storage);
+  const session = await f.open(next);
   assert.deepEqual(await readFile(file), original);
   const faux = createFauxCore({});
   faux.setResponses([fauxAssistantMessage("Recovered")]);
   next.streamFunction = faux.streamSimple;
   await session.prompt("你好");
-  await openSession(await f.agent(), f.workspace, f.storage);
+  await f.open(await f.agent());
 });
 
 test("restore completes only missing results in a trailing tool-call batch", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  await openSession(agent, f.workspace, f.storage);
+  await f.open(agent);
   const file = join(f.directory, `${agent.sessionId}.jsonl`);
   const calls = [
     fauxToolCall("read_file", { path: "a.txt" }),
@@ -88,7 +87,7 @@ test("restore completes only missing results in a trailing tool-call batch", asy
   const before = await readFile(file, "utf8");
   await appendFile(file, '{"type":');
   const next = await f.agent();
-  await openSession(next, f.workspace, f.storage);
+  await f.open(next);
   const results = next.state.messages.filter((message) => message.role === "toolResult");
   assert.equal(results.length, 2);
   assert.deepEqual(results[0], completed);
@@ -100,7 +99,7 @@ test("restore completes only missing results in a trailing tool-call batch", asy
 test("unfinished calls in the middle restore unchanged while partial tails are truncated", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  const session = await openSession(agent, f.workspace, f.storage);
+  const session = await f.open(agent);
   const id = agent.sessionId;
   assert.ok(id);
   const file = join(f.directory, `${id}.jsonl`);
@@ -133,7 +132,7 @@ test("unfinished calls in the middle restore unchanged while partial tails are t
       recorded.map((message) => `${JSON.stringify({ type: "message", message })}\n`).join("");
     await writeFile(file, `${contents}{"type":`);
     // Listing validates storage format only, without repairing or pairing calls.
-    assert.ok((await session.list()).some((summary) => summary.id === id));
+    assert.ok((await session.list()).sessions.some((summary) => summary.id === id));
     assert.equal(await readFile(file, "utf8"), `${contents}{"type":`);
     await session.resume(id);
     assert.equal(await readFile(file, "utf8"), contents);
@@ -141,7 +140,7 @@ test("unfinished calls in the middle restore unchanged while partial tails are t
     assert.equal(agent.sessionId, id);
     assert.equal(JSON.stringify(agent.state.messages), JSON.stringify([...baseline, ...recorded]));
     const next = await f.agent();
-    await openSession(next, f.workspace, f.storage);
+    await f.open(next);
     assert.equal(await readFile(file, "utf8"), contents);
     assert.deepEqual(next.state.messages, agent.state.messages);
   }

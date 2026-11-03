@@ -5,6 +5,7 @@ import { test } from "node:test";
 import type { AgentMessage, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRudy } from "../../src/agent.ts";
+import { compactionDefaults } from "../../src/config.ts";
 import { openSession } from "../../src/session/session.ts";
 import { fixture, user } from "./fixture.ts";
 
@@ -59,8 +60,13 @@ test("history pagination bounds output, continues long messages and rejects fore
     workspace: otherWorkspace,
     contextWindow: 128000,
     maxTokens: 4096,
+    ...compactionDefaults,
   });
-  await openSession(otherAgent, otherWorkspace, f.storage);
+  await openSession(otherAgent, {
+    workspace: otherWorkspace,
+    compaction: { ...compactionDefaults, maxTokens: 4096 },
+    storageRoot: f.storage,
+  });
   const otherTool = otherAgent.state.tools.find(
     (candidate) => candidate.name === "read_session_history",
   );

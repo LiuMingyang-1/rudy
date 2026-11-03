@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
-import { estimateMessage, estimateMessages } from "../../src/compaction/tokens.ts";
+import { compact } from "../../src/compaction/compact.ts";
+import {
+  createUsageBaseline,
+  estimateMessage,
+  estimateMessages,
+} from "../../src/compaction/tokens.ts";
+import { compactionDefaults } from "../../src/config.ts";
 import { fixture, noUsage, user } from "./fixture.ts";
 
 test("manual checkpoints preserve raw ordinals, restore latest summary and do not duplicate message events", async (t) => {
@@ -20,9 +26,9 @@ test("manual checkpoints preserve raw ordinals, restore latest summary and do no
   ]);
   await first.session.prompt(`Old question ${"x".repeat(8000)}`);
   const original = await readFile(first.file, "utf8");
-  const timestamp = (await first.session.list())[0].timestamp;
+  const timestamp = (await first.session.list()).sessions[0].timestamp;
   assert.equal(await first.session.compact(), true);
-  assert.equal((await first.session.list())[0].timestamp, timestamp);
+  assert.equal((await first.session.list()).sessions[0].timestamp, timestamp);
   const saved = await readFile(first.file, "utf8");
   assert.ok(saved.startsWith(original));
   assert.equal(saved.split('"type":"compaction"').length - 1, 1);
@@ -117,6 +123,24 @@ test("tool continuation is checked and an oversized latest batch can be summariz
   await session.prompt("Read large.txt");
   assert.equal(faux.state.callCount, 3);
   assert.equal(agent.state.errorMessage, undefined);
+});
+
+test("a boundary outside the session history rejects before any summary request", async (t) => {
+  const f = await fixture(t);
+  const { agent, faux } = await f.create();
+  await assert.rejects(
+    compact({
+      agent,
+      model: agent.state.model,
+      messages: [user("earlier"), user("b".repeat(400))],
+      raw: [user("kept")],
+      baseline: createUsageBaseline(),
+      options: { ...compactionDefaults, compactionKeepRecentTokens: 100, maxTokens: 4096 },
+      manual: true,
+    }),
+    /not in the session history/,
+  );
+  assert.equal(faux.state.callCount, 0);
 });
 
 test("compaction records validate boundaries and partial checkpoint tails are repaired", async (t) => {

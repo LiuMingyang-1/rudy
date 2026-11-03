@@ -30,10 +30,9 @@ export function printAgentEvent(event: AgentEvent): void {
   }
 }
 
-export function printSessions(sessions: SessionSummary[]): void {
+export function printSessions(sessions: SessionSummary[], skipped: number): void {
   if (!sessions.length) {
     console.log("No conversations to resume.");
-    return;
   }
   for (const [index, session] of sessions.entries()) {
     const time = new Date(session.timestamp);
@@ -41,6 +40,11 @@ export function printSessions(sessions: SessionSummary[]): void {
     const clock = `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}`;
     console.log(`${index + 1}  ${date} ${clock}`);
   }
+  if (skipped > 0) console.error(`Skipped ${skipped} unreadable conversation(s).`);
+}
+
+export function printCompaction(changed: boolean): void {
+  console.log(changed ? "Conversation compacted." : "No history to compact.");
 }
 
 export function printStatus(action: "reset" | "resume"): void {

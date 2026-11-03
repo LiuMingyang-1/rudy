@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { type Checkpoint, projectHistory } from "../compaction/checkpoint.ts";
+import { projectHistory } from "../compaction/checkpoint.ts";
 import { type CompactionOptions, compact } from "../compaction/compact.ts";
 import { createUsageBaseline } from "../compaction/tokens.ts";
 import { createHistoryTool } from "./history-tool.ts";
@@ -14,7 +14,7 @@ import { openStore, type SessionSummary } from "./store.ts";
 export interface RudySession {
   prompt(text: string): Promise<void>;
   reset(): Promise<void>;
-  list(): Promise<SessionSummary[]>;
+  list(): Promise<{ sessions: SessionSummary[]; skipped: number }>;
   resume(id: string): Promise<void>;
   compact(): Promise<boolean>;
   readonly busy: boolean;
@@ -24,14 +24,20 @@ export interface RudySession {
 /** The optional storage root keeps offline tests away from the user's sessions. */
 export async function openSession(
   agent: Agent,
-  workspace: string,
-  storageRoot = join(homedir(), ".rudy", "sessions"),
-  options: CompactionOptions = {},
+  options: {
+    workspace: string;
+    compaction: CompactionOptions;
+    storageRoot?: string;
+  },
 ): Promise<RudySession> {
   if (agent.state.isStreaming) throw new Error("Session is busy.");
-  const store = await openStore(storageRoot, await realpath(workspace));
+  const store = await openStore(
+    options.storageRoot ?? join(homedir(), ".rudy", "sessions"),
+    await realpath(options.workspace),
+  );
+  const { compaction } = options;
   let raw: AgentMessage[] = [];
-  let checkpoint: Checkpoint | undefined;
+  let checkpoint: CompactionRecord | undefined;
   const usage = createUsageBaseline();
   let controller: AbortController | undefined;
   let busy = false;
@@ -85,7 +91,7 @@ export async function openSession(
     id: string,
     state: AgentMessage[],
     rawMessages: AgentMessage[],
-    kept?: Checkpoint,
+    kept?: CompactionRecord,
   ): void {
     agent.reset();
     agent.state.messages = state;
@@ -120,12 +126,12 @@ export async function openSession(
       raw,
       checkpoint,
       baseline: usage,
-      options,
+      options: compaction,
       manual,
       signal,
     });
     if (!result) return;
-    const record: CompactionRecord = toRecord(result, raw.length);
+    const record = toRecord(result, raw, checkpoint);
     await persist(record);
     checkpoint = record;
     usage.clear();

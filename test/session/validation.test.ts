@@ -2,13 +2,12 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { openSession } from "../../src/session/session.ts";
 import { fixture } from "./fixture.ts";
 
 test("corrupt records, invalid message shapes and unsupported versions fail explicitly", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  await openSession(agent, f.workspace, f.storage);
+  await f.open(agent);
   const file = join(f.directory, `${agent.sessionId}.jsonl`);
   const original = await readFile(file, "utf8");
   for (const contents of [
@@ -20,7 +19,7 @@ test("corrupt records, invalid message shapes and unsupported versions fail expl
     original.replace('"toolsAdded":[', '"toolsRemoved":[null],"toolsAdded":['),
   ]) {
     await writeFile(file, contents);
-    await assert.rejects(openSession(await f.agent(), f.workspace, f.storage), /session|message/i);
+    await assert.rejects(f.open(await f.agent()), /session|message/i);
     assert.equal(await readFile(file, "utf8"), contents);
   }
 });
@@ -28,14 +27,14 @@ test("corrupt records, invalid message shapes and unsupported versions fail expl
 test("bad or dangling current pointers never silently create a new session", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  await openSession(agent, f.workspace, f.storage);
+  await f.open(agent);
   for (const pointer of [
     "{",
     '{"id":"../../outside"}',
     '{"id":"00000000-0000-4000-8000-000000000000"}',
   ]) {
     await writeFile(join(f.directory, "current.json"), pointer);
-    await assert.rejects(openSession(await f.agent(), f.workspace, f.storage));
+    await assert.rejects(f.open(await f.agent()));
     assert.equal(await readFile(join(f.directory, "current.json"), "utf8"), pointer);
   }
 });

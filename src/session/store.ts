@@ -11,7 +11,13 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { type CompactionRecord, isCompaction, isMessage, isRecord, sessionId } from "./records.ts";
+import {
+  type CompactionRecord,
+  isMessage,
+  isRecord,
+  sessionId,
+  validCheckpoint,
+} from "./records.ts";
 
 export interface SessionSummary {
   id: string;
@@ -27,7 +33,7 @@ export interface SessionStore {
     repair: boolean,
   ): Promise<{ messages: AgentMessage[]; compaction?: CompactionRecord }>;
   append(id: string, records: object[]): Promise<void>;
-  summaries(): Promise<SessionSummary[]>;
+  summaries(): Promise<{ sessions: SessionSummary[]; skipped: number }>;
 }
 
 export function isMissing(error: unknown): boolean {
@@ -120,11 +126,7 @@ export async function openStore(storageRoot: string, root: string): Promise<Sess
         }
       } else {
         if (record.type === "compaction") {
-          if (
-            !isCompaction(record, messages.length) ||
-            messages[record.firstKept - 1]?.role === "toolResult" ||
-            (compaction && record.firstKept < compaction.firstKept)
-          )
+          if (!validCheckpoint(record, messages, compaction))
             throw new Error(`Invalid compaction in session ${id}, line ${index + 1}.`);
           compaction = record;
           continue;
@@ -150,10 +152,16 @@ export async function openStore(storageRoot: string, root: string): Promise<Sess
     return ids;
   }
 
-  async function summaries(): Promise<SessionSummary[]> {
+  async function summaries(): Promise<{ sessions: SessionSummary[]; skipped: number }> {
     const sessions: SessionSummary[] = [];
+    let skipped = 0;
     for (const id of await ids()) {
-      const { messages } = await read(id, false);
+      const stored = await read(id, false).catch(() => undefined);
+      if (!stored) {
+        skipped++;
+        continue;
+      }
+      const { messages } = stored;
       if (!messages.some((message) => message.role === "user")) continue;
       const timestamp = messages.reduce(
         (latest, message) =>
@@ -162,7 +170,10 @@ export async function openStore(storageRoot: string, root: string): Promise<Sess
       );
       sessions.push({ id, timestamp });
     }
-    return sessions.sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id));
+    return {
+      sessions: sessions.sort((a, b) => b.timestamp - a.timestamp || a.id.localeCompare(b.id)),
+      skipped,
+    };
   }
 
   return {

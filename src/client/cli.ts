@@ -6,6 +6,7 @@ import { openSession, type RudySession } from "../session/session.ts";
 import type { SessionSummary } from "../session/store.ts";
 import {
   printAgentEvent,
+  printCompaction,
   printError,
   printHelp,
   printReplyEnd,
@@ -26,7 +27,15 @@ async function main(): Promise<void> {
   if (!args.length && !stdin.isTTY) {
     throw new Error('For non-interactive use, pass a task: npm start -- "your task".');
   }
-  const session = await openSession(agent, config.workspace, undefined, config);
+  const session = await openSession(agent, {
+    workspace: config.workspace,
+    compaction: {
+      compactionThreshold: config.compactionThreshold,
+      compactionKeepRecentTokens: config.compactionKeepRecentTokens,
+      compactionMaxTokens: config.compactionMaxTokens,
+      maxTokens: config.maxTokens,
+    },
+  });
 
   if (args.length > 0) {
     const cancel = () => session.cancel();
@@ -78,13 +87,11 @@ async function main(): Promise<void> {
         listed = [];
         printStatus("reset");
       } else if (text === "/compact") {
-        console.log(
-          (await session.compact()) ? "Conversation compacted." : "No history to compact.",
-        );
+        printCompaction(await session.compact());
       } else if (text === "/resume") {
-        listed = [];
-        listed = await session.list();
-        printSessions(listed);
+        const { sessions, skipped } = await session.list();
+        listed = sessions;
+        printSessions(sessions, skipped);
       } else if (/^\/resume\s/.test(text)) {
         const number = text.slice("/resume".length).trim();
         const selected = /^[1-9]\d*$/.test(number) ? listed[Number(number) - 1] : undefined;

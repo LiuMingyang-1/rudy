@@ -1,6 +1,10 @@
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
+const maxEntries = 50;
+const fragmentBudget = 12000;
+const pageLimit = 16000;
+
 export function createHistoryTool(view: {
   messages(): AgentMessage[];
   firstKept(): number | undefined;
@@ -44,8 +48,8 @@ export function createHistoryTool(view: {
         fragment: string;
         toolCallIds?: string[];
       }[] = [];
-      let remaining = 12000;
-      while (index >= 0 && entries.length < 50 && remaining > 0) {
+      let remaining = fragmentBudget;
+      while (index >= 0 && entries.length < maxEntries && remaining > 0) {
         const message = raw[index];
         if (!message) break;
         const text = JSON.stringify(message);
@@ -63,7 +67,7 @@ export function createHistoryTool(view: {
           JSON.stringify({
             entries: [...entries, { ...entry, fragment }],
             nextCursor: `${index + 1}:${offset + fragment.length}:${current}`,
-          }).length > 16000
+          }).length > pageLimit
         ) {
           fragment = fragment.slice(0, Math.floor(fragment.length / 2));
         }

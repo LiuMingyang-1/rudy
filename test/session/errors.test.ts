@@ -3,7 +3,6 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
-import { openSession } from "../../src/session/session.ts";
 import { fixture } from "./fixture.ts";
 
 test("model errors and cancellation persist messages before prompt settles", async (t) => {
@@ -15,14 +14,14 @@ test("model errors and cancellation persist messages before prompt settles", asy
     fauxAssistantMessage("Long response ".repeat(100)),
   ]);
   agent.streamFunction = faux.streamSimple;
-  const session = await openSession(agent, f.workspace, f.storage);
+  const session = await f.open(agent);
   await assert.rejects(session.prompt("Fail"), /Unavailable/);
   agent.subscribe((event) => {
     if (event.type === "message_update") agent.abort();
   });
   await assert.rejects(session.prompt("Cancel"), /aborted/i);
   const next = await f.agent();
-  await openSession(next, f.workspace, f.storage);
+  await f.open(next);
   assert.deepEqual(next.state.messages, agent.state.messages);
 });
 
@@ -32,7 +31,7 @@ test("write failures abort execution and block further prompts until reset", asy
   const faux = createFauxCore({});
   faux.setResponses([fauxAssistantMessage("After reset")]);
   agent.streamFunction = faux.streamSimple;
-  const session = await openSession(agent, f.workspace, f.storage);
+  const session = await f.open(agent);
   const file = join(f.directory, `${agent.sessionId}.jsonl`);
   await rename(file, `${file}.backup`);
   await mkdir(file);
@@ -48,7 +47,7 @@ test("write failures abort execution and block further prompts until reset", asy
 test("failed reset and resume preserve the active in-memory conversation", async (t) => {
   const f = await fixture(t);
   const agent = await f.agent();
-  const session = await openSession(agent, f.workspace, f.storage);
+  const session = await f.open(agent);
   const before = structuredClone(agent.state.messages);
   const id = agent.sessionId;
   await assert.rejects(session.resume("../outside"), /Invalid session ID/);

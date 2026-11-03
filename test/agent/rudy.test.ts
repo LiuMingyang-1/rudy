@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createFauxCore, fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { createRudy } from "../../src/agent.ts";
+import { compactionDefaults } from "../../src/config.ts";
 
 test("Rudy executes a tool and sends its result back before streaming the answer", async (t) => {
   const workspace = await mkdtemp(join(tmpdir(), "rudy-agent-"));
@@ -17,6 +18,7 @@ test("Rudy executes a tool and sends its result back before streaming the answer
     workspace,
     contextWindow: 128000,
     maxTokens: 4096,
+    ...compactionDefaults,
   });
   const faux = createFauxCore({});
   faux.setResponses([
@@ -50,6 +52,7 @@ test("Rudy returns denied file access to the model as a tool failure", async () 
     contextWindow: 128000,
     maxTokens: 4096,
     apiKey: "unused",
+    ...compactionDefaults,
     workspace: ".",
   });
   const faux = createFauxCore({});
@@ -74,6 +77,7 @@ test("Rudy exposes model failures and rejects unknown model configuration", asyn
     provider: "openai",
     model: "gpt-5.4",
     apiKey: "unused",
+    ...compactionDefaults,
     workspace: ".",
   } as const;
   const agent = await createRudy(config);
@@ -94,6 +98,7 @@ test("Rudy can cancel an active streamed response", async () => {
     provider: "openai",
     model: "gpt-5.4",
     apiKey: "unused",
+    ...compactionDefaults,
     workspace: ".",
   });
   const faux = createFauxCore({ tokensPerSecond: 100000 });
