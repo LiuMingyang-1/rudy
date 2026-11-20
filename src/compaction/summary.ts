@@ -74,7 +74,8 @@ export async function generateSummary(
     model.maxTokens,
     model.contextWindow - estimateMessages(context.messages) - 1024,
   );
-  if (available <= 0) throw new Error("Compaction input does not fit the model context window.");
+  if (available <= 0)
+    throw new Error("Compaction input does not fit the model context window. Use a shorter input.");
   let budget = Math.min(maxTokens, available);
   let qualityRetried = false;
   for (let attempt = 0; attempt < 3; attempt++) {

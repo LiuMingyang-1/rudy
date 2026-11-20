@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { eventProtocol, loopback, parseEventCursor } from "../protocol/task.ts";
-import type { TaskStore } from "../store/tasks.ts";
+import type { TaskStore } from "../store/tasks/store.ts";
 import { authorized } from "./connection.ts";
 import { taskRoute } from "./routes.ts";
 

@@ -1,101 +1,52 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { type Brief, maxBriefField, parseEventCursor } from "../protocol/task.ts";
+import { parseEventCursor } from "../protocol/task.ts";
 import type { LocalRunner } from "../runner/local.ts";
-import { contains, validateWorkspace } from "../runner/workspace.ts";
-import type { TaskStore } from "../store/tasks.ts";
+import type { TaskStore } from "../store/tasks/store.ts";
+import type { Orchestration } from "./orchestration.ts";
+import type { partnerRoutes } from "./partner.ts";
+import { object, RequestError, readBody } from "./requests.ts";
 
-class RequestError extends Error {
-  readonly status: number;
-
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function readBrief(request: IncomingMessage): Promise<Brief> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
-    if (!Buffer.isBuffer(chunk)) throw new RequestError(400, "Expected a JSON body.");
-    size += chunk.length;
-    if (size > 64 * 1024) {
-      request.resume();
-      throw new RequestError(413, "Task brief is too large.");
-    }
-    chunks.push(chunk);
-  }
-
-  let body: unknown;
-  try {
-    body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw new RequestError(400, "Expected a JSON task brief.");
-  }
-  if (!body || typeof body !== "object") throw new RequestError(400, "Expected a task brief.");
-  const brief: Brief = { goal: "", workspace: "", completion: "" };
-  for (const key of ["goal", "workspace", "completion", "scope", "constraints"] as const) {
-    const value = Object.getOwnPropertyDescriptor(body, key)?.value;
-    if (value === undefined && (key === "scope" || key === "constraints")) continue;
-    if (
-      typeof value !== "string" ||
-      !value.trim() ||
-      value.includes("\0") ||
-      value.length > maxBriefField
-    ) {
-      throw new RequestError(
-        400,
-        `Invalid brief field "${key}". Use 1–${maxBriefField} characters.`,
-      );
-    }
-    brief[key] = value;
-  }
-  return brief;
-}
-
-export const taskRoute = /^\/tasks\/([\w-]{1,128})(?:\/(events|stop))?$/;
+export const taskRoute = /^\/tasks\/([\w-]{1,128})(?:\/(events|stop|pause|resume|merge))?$/;
 
 export function json(response: ServerResponse, status: number, data: unknown): void {
   response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   response.end(JSON.stringify(data));
 }
 
-export function routes(store: TaskStore, runner: LocalRunner, root: string, dataDir: string) {
+export function routes(
+  store: TaskStore,
+  runner: LocalRunner,
+  orchestration: Orchestration,
+  partner: ReturnType<typeof partnerRoutes>,
+) {
   return async (request: IncomingMessage, response: ServerResponse, url: URL): Promise<void> => {
     try {
       if (url.pathname === "/tasks" && request.method === "GET") {
         return json(response, 200, store.list());
       }
-      if (url.pathname === "/tasks" && request.method === "POST") {
-        const brief = await readBrief(request);
-        try {
-          brief.workspace = await validateWorkspace(root, brief.workspace);
-          if (contains(brief.workspace, dataDir) || contains(dataDir, brief.workspace)) {
-            throw new Error("Workspace overlaps the Host data directory.");
-          }
-        } catch (error) {
-          throw new RequestError(
-            400,
-            error instanceof Error ? error.message : "Invalid workspace.",
-          );
+      if (request.method === "POST") {
+        if (url.pathname === "/delegate" || url.pathname === "/remember") {
+          return json(response, 201, await partner.handle(url.pathname, request, response));
         }
-        if (runner.unavailable)
-          throw new RequestError(503, "Host cannot accept execution requests.");
-        let task: ReturnType<TaskStore["create"]>;
-        try {
-          task = store.create(brief);
-        } catch (error) {
-          runner.storageFailed();
-          throw error;
+        if (url.pathname === "/tasks" || url.pathname === "/groups") {
+          const body = await readBody(request);
+          const group = url.pathname === "/groups";
+          const tasks = await orchestration.createTasks(group ? object(body).tasks : [body], group);
+          return json(response, 201, group ? tasks : tasks[0]);
         }
-        runner.dispatch();
-        return json(response, 201, task);
       }
+      const handled = await orchestration.handle(request, url);
+      if (handled) return json(response, handled.status, handled.data);
       const match = taskRoute.exec(url.pathname);
       const task = match && store.get(match[1]);
       if (!task) throw new RequestError(404, "Task or route not found.");
       if (request.method === "GET" && !match[2]) {
-        return json(response, 200, { task, executions: store.executions(task.taskId) });
+        return json(response, 200, {
+          task,
+          executions: store.executions(task.taskId),
+          checkpoint: store.checkpoint(task.taskId),
+          evidence: store.result(task.taskId)?.evidence,
+        });
       }
       if (request.method === "GET" && match[2] === "events") {
         let after: number;
@@ -109,17 +60,38 @@ export function routes(store: TaskStore, runner: LocalRunner, root: string, data
         }
         return json(response, 200, store.events(task.taskId, after));
       }
-      if (request.method === "POST" && match[2] === "stop") {
-        if (runner.unavailable) throw new RequestError(503, "Host cannot accept stop requests.");
+      if (request.method === "POST" && match[2] === "merge") {
+        return json(response, 200, await orchestration.merge(request, task.taskId));
+      }
+      if (request.method === "POST" && ["stop", "pause", "resume"].includes(match[2])) {
+        if (runner.unavailable)
+          throw new RequestError(503, "Host cannot accept execution requests.");
+        const action = match[2];
+        const harness = url.searchParams.get("harness") ?? task.harness;
+        if (harness !== "codex" && harness !== "claude-code") {
+          throw new RequestError(400, "Choose codex or claude-code.");
+        }
         let accepted: boolean;
         try {
-          accepted = runner.cancel(task);
+          accepted =
+            action === "resume"
+              ? store.requeue(task.taskId, harness)
+              : runner.stop(task, action === "pause");
         } catch (error) {
           runner.storageFailed();
           throw error;
         }
-        if (accepted) return json(response, 202, { taskId: task.taskId });
-        throw new RequestError(409, `Task cannot be stopped from status "${task.status}".`);
+        if (accepted) {
+          if (action === "resume") runner.dispatch();
+          return json(response, 202, { taskId: task.taskId });
+        }
+        if (action === "resume") {
+          throw new RequestError(
+            409,
+            task.reason ?? "The previous execution must stop before resuming or switching.",
+          );
+        }
+        throw new RequestError(409, `Cannot ${action} a task with status "${task.status}".`);
       }
       throw new RequestError(405, "Method not allowed.");
     } catch (error) {

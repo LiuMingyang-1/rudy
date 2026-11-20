@@ -6,6 +6,7 @@ export async function request(
   path: string,
   method = "GET",
   data?: unknown,
+  timeout = 10_000,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -14,7 +15,7 @@ export async function request(
       headers: { Authorization: `Bearer ${connection.token}`, "Content-Type": "application/json" },
       body: data === undefined ? undefined : JSON.stringify(data),
       redirect: "error",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeout),
     });
   } catch {
     throw new Error("Could not connect to the local Rudy Host. Start it with npm run host.");
@@ -58,6 +59,7 @@ export function tail(connection: Connection, taskId: string, cursor: number): Pr
       [eventProtocol, connection.token],
     );
 
+    let caughtUp = false;
     let finished = false;
     socket.addEventListener("message", (message) => {
       const batch: unknown = JSON.parse(String(message.data));
@@ -68,13 +70,15 @@ export function tail(connection: Connection, taskId: string, cursor: number): Pr
       }
       for (const event of batch) {
         if (event.type === "stream.caught_up") {
+          caughtUp = true;
           finished = event.status !== "running" && event.status !== "queued";
         } else {
           console.log(JSON.stringify(event));
           finished =
-            event.type === "execution.finished" ||
-            event.type === "task.waiting" ||
-            event.type === "task.canceled";
+            caughtUp &&
+            (event.type === "execution.finished" ||
+              event.type === "task.waiting" ||
+              event.type === "task.canceled");
         }
       }
       if (finished) {

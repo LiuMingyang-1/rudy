@@ -8,7 +8,7 @@ import { readConnection } from "../../src/host/connection.ts";
 import { startHost } from "../../src/host/local.ts";
 import type { Task, TaskDetail } from "../../src/protocol/task.ts";
 import { initSchema } from "../../src/store/database.ts";
-import { TaskStore } from "../../src/store/tasks.ts";
+import { TaskStore } from "../../src/store/tasks/store.ts";
 import { cli, fixture, ready, spawnHost, submit, waitFor } from "./fixture.ts";
 
 test("missing executable and early exits persist failed task and execution together", async (t) => {
@@ -38,7 +38,7 @@ test("missing executable and early exits persist failed task and execution toget
   }
 });
 
-test("restart preserves results and marks crash-orphaned runs as unconfirmed", async (t) => {
+test("restart preserves results and refuses a new writer until the orphaned process group exits", async (t) => {
   const f = await fixture(t);
   const first = await spawnHost(f);
   const done: Task = JSON.parse((await submit(f, "finish")).stdout);
@@ -61,7 +61,6 @@ test("restart preserves results and marks crash-orphaned runs as unconfirmed", a
 
   await first.crash();
   await spawnHost(f);
-  await writeFile(join(f.root, "release"), "");
   assert.equal((await cli(f, "show", done.taskId)).stdout, previous.stdout);
   assert.equal((await cli(f, "events", done.taskId)).stdout, history.stdout);
   assert.match((await cli(f, "list")).stdout, new RegExp(orphan.taskId));
@@ -72,6 +71,17 @@ test("restart preserves results and marks crash-orphaned runs as unconfirmed", a
   assert.equal(recovered.executions[0].executionId, active.executions[0].executionId);
   assert.equal(recovered.executions[0].nativeSessionId, active.executions[0].nativeSessionId);
   assert.equal(recovered.executions[0].endedAt, null);
+  const pgid = recovered.executions[0].pgid;
+  assert.ok(pgid && pgid === active.executions[0].pgid);
+  assert.equal(process.kill(-pgid, 0), true);
+  await assert.rejects(
+    cli(f, "switch", orphan.taskId, "--harness", "claude-code"),
+    /Host restarted before confirming/,
+  );
+  assert.equal(
+    (JSON.parse((await cli(f, "show", orphan.taskId)).stdout) as TaskDetail).executions.length,
+    1,
+  );
   assert.match((await cli(f, "tail", orphan.taskId)).stdout, /Host restarted before confirming/);
 
   const blocked: Task = JSON.parse((await submit(f, "overlap")).stdout);
@@ -79,6 +89,26 @@ test("restart preserves results and marks crash-orphaned runs as unconfirmed", a
     (await cli(f, "tail", blocked.taskId)).stdout,
     /Workspace overlaps unconfirmed execution/,
   );
+
+  await writeFile(join(f.root, "release"), "");
+  await waitFor(async () => {
+    try {
+      process.kill(-pgid, 0);
+      return false;
+    } catch (error) {
+      assert.ok(error instanceof Error && "code" in error && error.code === "ESRCH");
+      return true;
+    }
+  });
+  await cli(f, "resume", orphan.taskId);
+  assert.match(
+    (await cli(f, "tail", orphan.taskId)).stdout,
+    /Confirmed the previous execution stopped/,
+  );
+  const resumed: TaskDetail = JSON.parse((await cli(f, "show", orphan.taskId)).stdout);
+  assert.equal(resumed.task.status, "succeeded");
+  assert.ok(resumed.executions[0].endedAt);
+  assert.equal(resumed.executions[1].nativeSessionId, active.executions[0].nativeSessionId);
 });
 
 test("Host validates canonical workspace and requires local authentication", async (t) => {
@@ -132,4 +162,39 @@ test("an event insert failure rolls back task and execution state", () => {
     store.events(task.taskId, 0).map(({ type }) => type),
     ["task.queued", "execution.started"],
   );
+});
+
+test("Day 1 database migration retains session and event history and permits a second execution", () => {
+  using db = new DatabaseSync(":memory:");
+  db.exec(`
+    CREATE TABLE tasks (taskId TEXT PRIMARY KEY, brief TEXT, status TEXT, reason TEXT, createdAt TEXT);
+    CREATE TABLE executions (
+      executionId TEXT PRIMARY KEY, taskId TEXT UNIQUE REFERENCES tasks(taskId), nativeSessionId TEXT,
+      status TEXT, reason TEXT, result TEXT, startedAt TEXT, endedAt TEXT
+    );
+    CREATE TABLE events (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT, taskId TEXT REFERENCES tasks(taskId),
+      executionId TEXT REFERENCES executions(executionId), at TEXT, data TEXT
+    );
+    INSERT INTO tasks VALUES ('task', '{"goal":"legacy","workspace":"/tmp","completion":"done"}',
+      'succeeded', NULL, 'now');
+    INSERT INTO executions VALUES ('first', 'task', 'saved-thread', 'succeeded', NULL, 'done', 'now', 'now');
+    INSERT INTO events (taskId, executionId, at, data) VALUES
+      ('task', 'first', 'now', '{"type":"execution.session","nativeSessionId":"saved-thread"}');
+  `);
+  initSchema(db);
+  const store = new TaskStore(db);
+  assert.ok(store.requeue("task", "codex"));
+  const task = store.get("task");
+  assert.ok(task);
+  store.claim(task);
+  assert.deepEqual(
+    store.executions("task").map(({ harness, nativeSessionId }) => [harness, nativeSessionId]),
+    [
+      ["codex", "saved-thread"],
+      ["codex", null],
+    ],
+  );
+  assert.equal(store.events("task", 0)[0].executionId, "first");
+  assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 });

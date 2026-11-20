@@ -17,7 +17,7 @@
     "check": "biome check . && tsc --noEmit",
     "format": "biome check --write .",
     "test:unit": "node --test \"test/**/*.test.ts\"",
-    "host": "node src/client/host.ts",
+    "host": "node --env-file-if-exists=.env src/client/host.ts",
     "rudy": "node src/client/orchestration.ts"
   },
   "dependencies": {

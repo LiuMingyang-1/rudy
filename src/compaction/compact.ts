@@ -9,6 +9,7 @@ export interface CompactionOptions {
   compactionKeepRecentTokens: number;
   compactionMaxTokens: number;
   maxTokens: number;
+  preserveLatestUser?: boolean;
 }
 
 export interface CompactionResult extends Checkpoint {
@@ -38,12 +39,16 @@ export async function compact(input: {
   const conversation = messages.filter((message) => message.role !== "system");
   // The synthetic summary is already represented by the checkpoint, not a raw ordinal.
   const recent = checkpoint ? conversation.slice(1) : conversation;
-  const start = recentStart(recent, options.compactionKeepRecentTokens);
+  const latestUser = options.preserveLatestUser
+    ? recent.findLastIndex((message) => message.role === "user")
+    : -1;
+  const start = Math.min(
+    recentStart(recent, options.compactionKeepRecentTokens),
+    latestUser === -1 ? recent.length : latestUser,
+  );
   if (start === 0) {
     if (!fits(before))
-      throw new Error(
-        "Context and output do not fit the model window; no history can be compacted.",
-      );
+      throw new Error("Context and output do not fit the model window. Use a shorter input.");
     return;
   }
   const tail = recent.slice(start);
@@ -51,7 +56,7 @@ export async function compact(input: {
   const firstKept = first ? raw.indexOf(first) + 1 : raw.length + 1;
   if (firstKept === 0) throw new Error("Compaction boundary is not in the session history.");
   if (checkpoint && firstKept <= checkpoint.firstKept) {
-    if (!fits(before)) throw new Error("Context still does not fit after compaction.");
+    if (!fits(before)) throw new Error("Context still does not fit. Use a shorter input.");
     return;
   }
   const result = await generateSummary(agent, model, messages, options.compactionMaxTokens, signal);
@@ -63,7 +68,7 @@ export async function compact(input: {
   const replacement = projectHistory(raw, candidate, getCurrentSystemMessage(messages));
   const tokensAfter = estimateMessages(replacement);
   if (!fits(tokensAfter) || tokensAfter >= before)
-    throw new Error("Compaction did not reduce context enough to continue safely.");
+    throw new Error("Compaction did not reduce context enough to continue. Use a shorter input.");
   signal?.throwIfAborted();
   return {
     ...candidate,
